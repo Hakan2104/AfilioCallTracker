@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ETB Anruferfassung</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; background: #FFF7E5; color: #222; }
+    header { background: #FDB743; color: white; padding: 1rem; text-align: center; font-size: 1.5rem; font-weight: 600; }
+    #login-screen, #dashboard, #password-change, #admin-panel {
+      max-width: 700px; margin: 2rem auto; padding: 2rem; background: white;
+      border-radius: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.1); display: none;
+    }
+    input, button {
+      display: block; width: 100%; padding: 0.75rem; margin-bottom: 1rem;
+      border-radius: 8px; border: 1px solid #ccc; font-size: 1rem;
+    }
+    button { background-color: #FFC700; color: #222; border: none; font-weight: 600; cursor: pointer; }
+    button:hover:enabled, .active-btn { background-color: #FDB743 !important; }
+    button:disabled { background-color: #ddd; color: #999; cursor: not-allowed; }
+    #work-timer { font-size: 0.9rem; font-style: italic; margin-bottom: 1rem; }
+    .summary-line { display: flex; justify-content: space-between; align-items: center; }
+    .summary-line button { width: 30px; padding: 0.2rem; }
+    .click-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1rem; }
+    .click-row button { flex: 1; }
+    #summary-content { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <header>ETB Support Solutions – Anruferfassung</header>
+
+  <div id="login-screen">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Name">
+    <input type="password" id="password" placeholder="Passwort">
+    <button onclick="login()">Einloggen</button>
+  </div>
+
+  <div id="password-change">
+    <h2>Passwort ändern</h2>
+    <input type="password" id="new-password" placeholder="Neues Passwort">
+    <input type="password" id="confirm-password" placeholder="Passwort bestätigen">
+    <button onclick="submitNewPassword()">Speichern</button>
+  </div>
+
+  <div id="dashboard">
+    <h2>Willkommen, <span id="user-name"></span></h2>
+    <div id="admin-panel">
+      <h3>Adminbereich</h3>
+      <p>Hier folgen Benutzerverwaltung und Passwort-Reset (in Aufbau).</p>
+    </div>
+  </div>
+
+  <script>
+    let userLoginName = '';
+    let isAdmin = false;
+    let firstLogin = false;
+
+    async function login() {
+      const name = document.getElementById('username').value.trim();
+      const pass = document.getElementById('password').value;
+      if (!name || !pass) return alert("Bitte Benutzername und Passwort eingeben.");
+
+      const encoder = new TextEncoder();
+      const data = encoder.encode(pass);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const res = await fetch('https://script.google.com/macros/s/AKfycbxDad9OuBt2V9awEDI67M9yCHEFlv85fc-0VErl_EY3xANZoUd6uIxWHcBLtwZN57ngqA/exec', {
+        method: 'POST',
+        body: JSON.stringify({ username: name, passwordHash }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await res.json();
+
+      if (result.status === 'success') {
+        userLoginName = name;
+        firstLogin = result.firstLogin;
+        isAdmin = result.isAdmin;
+
+        if (firstLogin) {
+          document.getElementById('login-screen').style.display = 'none';
+          document.getElementById('password-change').style.display = 'block';
+        } else {
+          openDashboard();
+        }
+      } else if (result.status === 'invalid') {
+        alert('Falsches Passwort.');
+      } else if (result.status === 'inactive') {
+        alert('Benutzer ist deaktiviert.');
+      } else if (result.status === 'not_found') {
+        alert('Benutzer nicht gefunden.');
+      } else {
+        alert('Unbekannter Fehler beim Login.');
+      }
+    }
+
+    function openDashboard() {
+      document.getElementById('user-name').innerText = userLoginName;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('password-change').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      document.getElementById('admin-panel').style.display = isAdmin ? 'block' : 'none';
+    }
+
+    async function submitNewPassword() {
+      const newPass = document.getElementById('new-password').value;
+      const confirm = document.getElementById('confirm-password').value;
+
+      if (!newPass || newPass.length < 4) return alert('Passwort zu kurz.');
+      if (newPass !== confirm) return alert('Passwörter stimmen nicht überein.');
+
+      const encoder = new TextEncoder();
+      const data = encoder.encode(newPass);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const newHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const res = await fetch('https://script.google.com/macros/s/AKfycbxDad9OuBt2V9awEDI67M9yCHEFlv85fc-0VErl_EY3xANZoUd6uIxWHcBLtwZN57ngqA/exec?action=updatePassword', {
+        method: 'POST',
+        body: JSON.stringify({ username: userLoginName, passwordHash: newHash }),
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await res.json();
+      if (result.status === 'updated') {
+        alert('Passwort wurde geändert.');
+        openDashboard();
+      } else {
+        alert('Fehler beim Speichern.');
+      }
+    }
+
+    window.onload = () => {
+      document.getElementById('login-screen').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
